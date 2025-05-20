@@ -1,26 +1,31 @@
 #include "log.h"
 #include "tun.h"
 #include <csignal>
+#include <vector>
 
 static bool running = true;
 void signal_handler(int) { running = false; }
 
 int main() {
   signal(SIGINT, signal_handler);
-  TunDevice tun("tun69", 1500);
+  TunDevice tap("tap69", 1500);
+  std::vector<uint8_t> frame;
 
   try {
-    tun.open();
-    LOG_INFO("TUN interface {} created", tun.get_name());
+    tap.open();
+    LOG_INFO("TUN interface {} created", tap.get_name());
 
     while (running) {
-      LOG_TRACE("RUNNING");
+      auto n = tap.read(frame);
+      LOG_INFO("Read {} bytes", n);
+      n = tap.write(frame);
+      LOG_INFO("Wrote {} bytes", n);
     }
   } catch (const std::exception &e) {
     LOG_ERROR("{}", e.what());
     return -1;
   }
 
-  LOG_INFO("TUN interface {} closed", tun.get_name());
+  LOG_INFO("TUN interface {} closed", tap.get_name());
   return 0;
 }

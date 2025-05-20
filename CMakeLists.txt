@@ -12,7 +12,7 @@ file(GLOB_RECURSE sources "${CMAKE_SOURCE_DIR}/src/*.c"
 
 add_executable(tcp_ip ${sources})
 
-add_definitions(-std=c++26 -DLOG_LEVEL=DEBUG)
+add_definitions(-std=c++26 -DLOG_LEVEL=TRACE)
 
 # Add more include directories if needed
 target_include_directories(tcp_ip PUBLIC "${CMAKE_SOURCE_DIR}/include")

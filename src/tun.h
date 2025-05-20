@@ -1,5 +1,8 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 class TunDevice {
 public:
@@ -9,6 +12,9 @@ public:
   void open();
 
   std::string get_name() const;
+
+  std::size_t read(std::vector<uint8_t> &buffer);
+  std::size_t write(const std::vector<uint8_t> &buffer);
 
 private:
   int _fd{-1};
