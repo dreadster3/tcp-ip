@@ -1,4 +1,5 @@
 #include "log.h"
+#include "net/ethernet.h"
 #include "tun.h"
 #include <csignal>
 #include <vector>
@@ -18,6 +19,14 @@ int main() {
     while (running) {
       auto n = tap.read(frame);
       LOG_INFO("Read {} bytes", n);
+
+      std::span<const uint8_t> payload;
+      auto ethernet_header = net::ethernet::parse_header(frame, payload);
+      if (ethernet_header) {
+        LOG_INFO("Ethernet packet received");
+        LOG_DEBUG("Header: {}", ethernet_header->to_string());
+      }
+
       n = tap.write(frame);
       LOG_INFO("Wrote {} bytes", n);
     }
