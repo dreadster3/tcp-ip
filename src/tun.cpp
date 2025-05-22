@@ -44,8 +44,8 @@ void TunDevice::open() {
   LOG_DEBUG("Interface {} attached to fd {}", _if_name, _fd);
 
   utils::cmd("ip link set dev {} up", _if_name);
-  utils::cmd("ip route add dev {} {}", _if_name, "10.0.0.0/24");
-  utils::cmd("ip addr add dev {} local {}", _if_name, "10.0.0.5");
+  utils::cmd("ip route add dev {} {}", _if_name, "10.10.10.0/24");
+  // utils::cmd("ip addr add dev {} local {}", _if_name, "10.10.10.5"); //
 
   LOG_DEBUG("Interface {} initialized", _if_name);
 }

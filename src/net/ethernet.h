@@ -19,8 +19,6 @@ inline PacketType to_type(uint16_t type) {
   switch (type) {
   case 0x0800:
     return PacketType::IPv4;
-  case 0x0801:
-    return PacketType::ICMP;
   case 0x0806:
     return PacketType::ARP;
   default:
@@ -32,8 +30,6 @@ inline std::string packet_type_to_string(PacketType type) {
   switch (type) {
   case PacketType::IPv4:
     return "IPv4";
-  case PacketType::ICMP:
-    return "ICMP";
   case PacketType::ARP:
     return "ARP";
   default:

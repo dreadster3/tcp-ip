@@ -17,6 +17,26 @@ inline std::string ip_to_string(uint32_t ip) {
 }
 
 #pragma pack(push, 1)
+enum class Protocol : uint8_t { ICMP = 0x01, Unknown = 0x00 };
+
+inline Protocol protocol_from_u8(uint8_t protocol) {
+  switch (protocol) {
+  case 0x01:
+    return Protocol::ICMP;
+  default:
+    return Protocol::Unknown;
+  }
+}
+
+inline std::string protocol_to_string(Protocol protocol) {
+  switch (protocol) {
+  case Protocol::ICMP:
+    return "ICMP";
+  default:
+    return "Unknown";
+  }
+}
+
 struct Header {
   std::uint8_t version : 4;
   std::uint8_t internet_header_length : 4;
@@ -26,7 +46,7 @@ struct Header {
   std::uint16_t flags : 3;
   std::uint16_t fragment_offset : 13;
   std::uint8_t time_to_live;
-  std::uint8_t protocol;
+  Protocol protocol;
   std::uint16_t checksum;
   std::uint32_t source;
   std::uint32_t destination;
@@ -37,8 +57,8 @@ struct Header {
                        "source={}, destination={})",
                        version, internet_header_length, type_of_service, length,
                        identification, flags, fragment_offset, time_to_live,
-                       protocol, checksum, ip_to_string(source),
-                       ip_to_string(destination));
+                       protocol_to_string(protocol), checksum,
+                       ip_to_string(source), ip_to_string(destination));
   }
 };
 #pragma pack(pop)
@@ -77,7 +97,7 @@ inline std::optional<Header> parse(std::span<const uint8_t> packet,
   header.flags = net_to_host(((packet[6] << 8 & packet[7]) >> 13) & 0x07);
   header.fragment_offset = net_to_host((packet[6] << 8 & packet[7]) & 0x1fff);
   header.time_to_live = packet[8];
-  header.protocol = packet[9];
+  header.protocol = protocol_from_u8(packet[9]);
   header.checksum = net_to_host((packet[10] << 8) | packet[11]);
   header.source =
       (packet[12] << 24) | (packet[13] << 16) | (packet[14] << 8) | packet[15];
