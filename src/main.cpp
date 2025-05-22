@@ -1,4 +1,5 @@
 #include "log.h"
+#include "net/arp.h"
 #include "net/ethernet.h"
 #include "net/icmp.h"
 #include "net/ipv4.h"
@@ -11,8 +12,10 @@ void signal_handler(int) { running = false; }
 
 int main() {
   signal(SIGINT, signal_handler);
+  uint32_t ip_address = 0x0A0A0A05;
+  std::array<uint8_t, 6> mac = {0xBA, 0x14, 0x16, 0x19, 0x10, 0x1B};
   TunDevice tap("tap69", 1500);
-  std::vector<uint8_t> frame;
+  std::vector<uint8_t> frame, reply;
 
   try {
     tap.open();
@@ -23,7 +26,7 @@ int main() {
       LOG_INFO("Read {} bytes", n);
 
       std::span<const uint8_t> packet;
-      auto ethernet_header = net::ethernet::parse_header(frame, packet);
+      auto ethernet_header = net::ethernet::parse(frame, packet);
 
       if (!ethernet_header)
         continue;
@@ -32,6 +35,51 @@ int main() {
       LOG_DEBUG("Ethernet Header: {}", ethernet_header->to_string());
 
       switch (ethernet_header->type) {
+      case net::ethernet::PacketType::ARP: {
+        auto arp_header = net::ethernet::arp::parse(packet);
+        if (!arp_header) {
+          continue;
+        }
+
+        LOG_INFO("ARP packet received");
+        LOG_DEBUG("ARP Header: {}", arp_header->to_string());
+
+        if (arp_header->opcode != 1 ||
+            arp_header->destination_ip != ip_address) {
+          continue;
+        }
+
+        auto reply_header = net::ethernet::arp::Header();
+        reply_header.hardware_type = 0x0001;
+        reply_header.protocol_type = 0x0800;
+        reply_header.hardware_length = 0x06;
+        reply_header.protocol_length = 0x04;
+        reply_header.opcode = 0x02;
+        reply_header.source_mac_address = mac;
+        reply_header.source_ip = arp_header->destination_ip;
+        reply_header.destination_mac_address = arp_header->source_mac_address;
+        reply_header.destination_ip = arp_header->source_ip;
+        LOG_DEBUG("ARP reply: {}", reply_header.to_string());
+
+        std::vector<uint8_t> reply_arp_packet;
+        net::ethernet::arp::build(reply_header, reply_arp_packet);
+        LOG_DEBUG("Successfully built ARP reply (size {})",
+                  reply_arp_packet.size());
+
+        auto reply_ethernet_header = net::ethernet::Header();
+        reply_ethernet_header.type = net::ethernet::PacketType::ARP;
+        reply_ethernet_header.src_mac = mac;
+        reply_ethernet_header.dst_mac = ethernet_header->src_mac;
+        LOG_DEBUG("ARP reply ethernet: {}", reply_ethernet_header.to_string());
+
+        net::ethernet::build(reply_ethernet_header, reply_arp_packet, reply);
+        LOG_DEBUG("Successfully built ARP ethernet reply (size {})",
+                  reply.size());
+        n = tap.write(reply);
+        LOG_DEBUG("Successfully sent ARP reply: {}", n);
+
+        break;
+      }
       case net::ethernet::PacketType::IPv4: {
         std::span<const uint8_t> ipv4_data;
         auto ipv4_header = net::ethernet::ipv4::parse(packet, ipv4_data);
@@ -66,9 +114,6 @@ int main() {
                  net::ethernet::packet_type_to_string(ethernet_header->type));
         break;
       }
-
-      n = tap.write(frame);
-      LOG_INFO("Wrote {} bytes", n);
     }
   } catch (const std::exception &e) {
     LOG_ERROR("{}", e.what());

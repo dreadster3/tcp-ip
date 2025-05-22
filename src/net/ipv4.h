@@ -16,7 +16,6 @@ inline std::string ip_to_string(uint32_t ip) {
                      (ip >> 8) & 0xFF, ip & 0xFF);
 }
 
-#pragma pack(push, 1)
 enum class Protocol : uint8_t { ICMP = 0x01, Unknown = 0x00 };
 
 inline Protocol protocol_from_u8(uint8_t protocol) {
@@ -37,6 +36,7 @@ inline std::string protocol_to_string(Protocol protocol) {
   }
 }
 
+#pragma pack(push, 1)
 struct Header {
   std::uint8_t version : 4;
   std::uint8_t internet_header_length : 4;

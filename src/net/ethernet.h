@@ -6,11 +6,11 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace net::ethernet {
 enum class PacketType : uint16_t {
   IPv4 = 0x0800,
-  ICMP = 0x0801,
   ARP = 0x0806,
   Unknown = 0x0000,
 };
@@ -38,8 +38,8 @@ inline std::string packet_type_to_string(PacketType type) {
 }
 
 inline std::string mac_to_string(std::span<const uint8_t, 6> mac) {
-  return std::format("{:0>2x}:{:0>2x}:{:0>2x}:{:0>2x}:{:0>2x}:{:0>2x}", mac[0],
-                     mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return std::format("{0:0>2x}:{1:0>2x}:{2:0>2x}:{3:0>2x}:{4:0>2x}:{5:0>2x}",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 #pragma pack(push, 1)
@@ -56,8 +56,8 @@ struct Header {
 };
 #pragma pack(pop)
 
-inline std::optional<Header> parse_header(std::span<const uint8_t> frame,
-                                          std::span<const uint8_t> &payload) {
+inline std::optional<Header> parse(std::span<const uint8_t> frame,
+                                   std::span<const uint8_t> &payload) {
   if (frame.size() < sizeof(Header)) {
     return std::nullopt;
   }
@@ -71,6 +71,17 @@ inline std::optional<Header> parse_header(std::span<const uint8_t> frame,
 
   payload = frame.subspan(14);
   return header;
+}
+
+inline void build(const Header &header, std::span<const uint8_t> payload,
+                  std::vector<uint8_t> &out) {
+  out.clear();
+  out.reserve(sizeof(Header) + payload.size());
+  out.insert(out.end(), header.dst_mac.begin(), header.dst_mac.end());
+  out.insert(out.end(), header.src_mac.begin(), header.src_mac.end());
+  out.push_back(((uint16_t)header.type >> 8) & 0xFF);
+  out.push_back(((uint16_t)header.type) & 0xFF);
+  out.insert(out.end(), payload.begin(), payload.end());
 }
 
 } // namespace net::ethernet
