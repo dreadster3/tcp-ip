@@ -7,3 +7,4 @@ Simple implementation of TCP/IP stack. For learning purposes only.
 - [x] Logging
 - [x] Create tun interface
 - [x] Parse ethernet frame
+- [x] Parse IP packet
