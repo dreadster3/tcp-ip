@@ -62,7 +62,7 @@ struct Header {
 
 inline std::optional<Header> parse_header(std::span<const uint8_t> frame,
                                           std::span<const uint8_t> &payload) {
-  if (frame.size() < 14) {
+  if (frame.size() < sizeof(Header)) {
     return std::nullopt;
   }
 
