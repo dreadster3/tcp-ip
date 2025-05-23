@@ -8,8 +8,12 @@
 #include <string>
 
 namespace net::ethernet::ipv4 {
-inline uint32_t net_to_host_32(uint32_t net) { return __builtin_bswap32(net); }
-inline uint16_t net_to_host(uint16_t net) { return __builtin_bswap16(net); }
+inline uint16_t swap16(uint16_t v) { return (v >> 8) | (v << 8); }
+inline uint32_t swap32(uint32_t v) { return __builtin_bswap32(v); }
+inline uint16_t ntohs(uint16_t n) { return swap16(n); }
+inline uint16_t htons(uint16_t h) { return swap16(h); }
+inline uint32_t ntohl(uint32_t n) { return swap32(n); }
+inline uint32_t htonl(uint32_t h) { return swap32(h); }
 
 inline std::string ip_to_string(uint32_t ip) {
   return std::format("{}.{}.{}.{}", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
@@ -34,6 +38,19 @@ inline std::string protocol_to_string(Protocol protocol) {
   default:
     return "Unknown";
   }
+}
+inline uint16_t calculate_checksum(std::span<const uint8_t> packet) {
+  uint32_t sum = 0;
+  const uint16_t *p = reinterpret_cast<const uint16_t *>(packet.data());
+
+  for (int i = 0; i < packet.size(); i += 2) {
+    sum += p[i / 2];
+  }
+
+  while (sum >> 16) {
+    sum = (sum >> 16) + (sum & 0xffff);
+  }
+  return static_cast<uint16_t>(~sum);
 }
 
 #pragma pack(push, 1)
@@ -60,22 +77,13 @@ struct Header {
                        protocol_to_string(protocol), checksum,
                        ip_to_string(source), ip_to_string(destination));
   }
+
+  uint16_t calculate_checksum() const {
+    const uint8_t *p = reinterpret_cast<const uint8_t *>(this);
+    return ipv4::calculate_checksum({p, sizeof(Header)});
+  }
 };
 #pragma pack(pop)
-
-inline uint16_t calculate_checksum(std::span<const uint8_t> packet) {
-  uint32_t sum = 0;
-  const uint16_t *p = reinterpret_cast<const uint16_t *>(packet.data());
-
-  for (int i = 0; i < packet.size(); i += 2) {
-    sum += p[i / 2];
-  }
-
-  while (sum >> 16) {
-    sum = (sum >> 16) + (sum & 0xffff);
-  }
-  return static_cast<uint16_t>(~sum);
-}
 
 inline std::optional<Header> parse(std::span<const uint8_t> packet,
                                    std::span<const uint8_t> &payload) {
@@ -92,13 +100,13 @@ inline std::optional<Header> parse(std::span<const uint8_t> packet,
   }
 
   header.type_of_service = packet[1];
-  header.length = net_to_host((packet[2] << 8) | packet[3]);
-  header.identification = net_to_host((packet[4] << 8) | packet[5]);
-  header.flags = net_to_host(((packet[6] << 8 & packet[7]) >> 13) & 0x07);
-  header.fragment_offset = net_to_host((packet[6] << 8 & packet[7]) & 0x1fff);
+  header.length = ntohs((packet[2] << 8) | packet[3]);
+  header.identification = ntohs((packet[4] << 8) | packet[5]);
+  header.flags = ntohs(((packet[6] << 8 & packet[7]) >> 13) & 0x07);
+  header.fragment_offset = ntohs((packet[6] << 8 & packet[7]) & 0x1fff);
   header.time_to_live = packet[8];
   header.protocol = protocol_from_u8(packet[9]);
-  header.checksum = net_to_host((packet[10] << 8) | packet[11]);
+  header.checksum = ntohs((packet[10] << 8) | packet[11]);
   header.source =
       (packet[12] << 24) | (packet[13] << 16) | (packet[14] << 8) | packet[15];
   header.destination =
@@ -119,4 +127,37 @@ inline std::optional<Header> parse(std::span<const uint8_t> packet,
   payload = packet.subspan(header.internet_header_length * 4);
   return header;
 }
+
+inline void build(const Header &header, std::span<const uint8_t> payload,
+                  std::vector<uint8_t> &out) {
+  out.clear();
+  out.reserve(sizeof(Header) + payload.size());
+
+  out.push_back((header.version << 4) | header.internet_header_length);
+  out.push_back(header.type_of_service);
+  out.push_back((header.length >> 8) & 0xFF);
+  out.push_back((header.length & 0xFF));
+  out.push_back((header.identification >> 8) & 0xFF);
+  out.push_back((header.identification & 0xFF));
+  out.push_back(((header.flags & 0x07) << 13) |
+                (header.fragment_offset & 0x1FFF));
+  out.push_back(((header.flags >> 3) & 0xFF) | (header.fragment_offset >> 13));
+  out.push_back((uint8_t)header.protocol);
+
+  out.push_back((header.checksum >> 8) & 0xFF);
+  out.push_back(header.checksum & 0xFF);
+
+  out.push_back((header.source >> 24) & 0xff);
+  out.push_back((header.source >> 16) & 0xff);
+  out.push_back((header.source >> 8) & 0xff);
+  out.push_back(header.source & 0xff);
+
+  out.push_back((header.destination >> 24) & 0xff);
+  out.push_back((header.destination >> 16) & 0xff);
+  out.push_back((header.destination >> 8) & 0xff);
+  out.push_back(header.destination & 0xff);
+
+  out.insert(out.end(), payload.begin(), payload.end());
+}
+
 } // namespace net::ethernet::ipv4

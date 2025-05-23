@@ -5,6 +5,7 @@
 #include "net/ipv4.h"
 #include "tun.h"
 #include <csignal>
+#include <cstdint>
 #include <vector>
 
 static bool running = true;
@@ -63,7 +64,7 @@ int main() {
 
         std::vector<uint8_t> reply_arp_packet;
         net::ethernet::arp::build(reply_header, reply_arp_packet);
-        LOG_DEBUG("Successfully built ARP reply (size {})",
+        LOG_TRACE("Successfully built ARP reply (size {})",
                   reply_arp_packet.size());
 
         auto reply_ethernet_header = net::ethernet::Header();
@@ -73,7 +74,7 @@ int main() {
         LOG_DEBUG("ARP reply ethernet: {}", reply_ethernet_header.to_string());
 
         net::ethernet::build(reply_ethernet_header, reply_arp_packet, reply);
-        LOG_DEBUG("Successfully built ARP ethernet reply (size {})",
+        LOG_TRACE("Successfully built ARP ethernet reply (size {})",
                   reply.size());
         n = tap.write(reply);
         LOG_DEBUG("Successfully sent ARP reply: {}", n);
@@ -98,6 +99,51 @@ int main() {
 
             LOG_INFO("ICMP packet received");
             LOG_DEBUG("ICMP Header: {}", icmp_header->to_string());
+
+            auto icmp_reply_header = net::ethernet::ipv4::icmp::Header();
+            icmp_reply_header.type =
+                net::ethernet::ipv4::icmp::PacketType::Reply;
+            icmp_reply_header.code = 0;
+            icmp_reply_header.identifier = icmp_header->identifier;
+            icmp_reply_header.sequence_number = icmp_header->sequence_number;
+            icmp_reply_header.checksum = icmp_header->calculate_checksum();
+
+            std::vector<uint8_t> icmp_reply_packet;
+            net::ethernet::ipv4::icmp::build(icmp_reply_header,
+                                             icmp_reply_packet);
+            LOG_DEBUG("ICMP reply: {}", icmp_reply_header.to_string());
+
+            auto ipv4_reply_header = net::ethernet::ipv4::Header();
+            ipv4_reply_header.internet_header_length = 5;
+            ipv4_reply_header.version = 4;
+            ipv4_reply_header.protocol = net::ethernet::ipv4::Protocol::ICMP;
+            ipv4_reply_header.type_of_service = 0;
+            ipv4_reply_header.identification = ipv4_header->identification + 1;
+            ipv4_reply_header.flags = 0;
+            ipv4_reply_header.fragment_offset = 0;
+            ipv4_reply_header.time_to_live = 64;
+            ipv4_reply_header.source = ip_address;
+            ipv4_reply_header.destination = ipv4_header->source;
+            ipv4_reply_header.length = net::ethernet::ipv4::htons(
+                ipv4_reply_header.internet_header_length * 4 +
+                icmp_reply_packet.size());
+            ipv4_reply_header.checksum = ipv4_reply_header.calculate_checksum();
+
+            std::vector<uint8_t> ipv4_reply_packet;
+            net::ethernet::ipv4::build(ipv4_reply_header, icmp_reply_packet,
+                                       ipv4_reply_packet);
+            LOG_DEBUG("IPv4 reply: {}", ipv4_reply_header.to_string());
+
+            auto ethernet_reply_header = net::ethernet::Header();
+            ethernet_reply_header.type = net::ethernet::PacketType::IPv4;
+            ethernet_reply_header.src_mac = mac;
+            ethernet_reply_header.dst_mac = ethernet_header->src_mac;
+
+            net::ethernet::build(ethernet_reply_header, ipv4_reply_packet,
+                                 reply);
+            LOG_DEBUG("Ethernet reply: {}", ethernet_reply_header.to_string());
+
+            tap.write(reply);
             break;
           }
           default:

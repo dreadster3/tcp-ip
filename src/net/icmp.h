@@ -1,10 +1,14 @@
 #pragma once
 
+#include "ipv4.h"
+#include "log.h"
 #include <cstdint>
+#include <cstring>
 #include <format>
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace net::ethernet::ipv4::icmp {
 enum class PacketType : uint8_t { Reply = 0x00, Echo = 0x08, Unknown = 0x00 };
@@ -45,11 +49,16 @@ struct Header {
                        type_to_string(type), code, checksum, identifier,
                        sequence_number);
   }
+
+  uint16_t calculate_checksum() const {
+    const uint8_t *p = reinterpret_cast<const uint8_t *>(this);
+    return net::ethernet::ipv4::calculate_checksum({p, sizeof(Header)});
+  }
 };
 #pragma pack(pop)
 
-std::optional<Header> parse(std::span<const uint8_t> packet,
-                            std::span<const uint8_t> &payload) {
+inline std::optional<Header> parse(std::span<const uint8_t> packet,
+                                   std::span<const uint8_t> &payload) {
   if (packet.size() < sizeof(Header)) {
     return std::nullopt;
   }
@@ -65,6 +74,19 @@ std::optional<Header> parse(std::span<const uint8_t> packet,
 
   payload = packet.subspan(8);
   return header;
+}
+
+inline void build(const Header &header, std::vector<uint8_t> &out) {
+  out.clear();
+  out.reserve(sizeof(Header));
+
+  out.push_back((uint8_t)header.type);
+  out.push_back(header.code);
+  out.push_back((uint8_t)(header.checksum >> 8 & 0xFF));
+  out.push_back((uint8_t)(header.checksum & 0xFF));
+  out.push_back((uint8_t)(header.identifier >> 8 & 0xFF));
+  out.push_back((uint8_t)(header.identifier & 0xFF));
+  out.push_back((uint8_t)(header.sequence_number >> 8 & 0xFF));
 }
 
 } // namespace net::ethernet::ipv4::icmp
