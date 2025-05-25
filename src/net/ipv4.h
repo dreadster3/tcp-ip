@@ -77,11 +77,6 @@ struct Header {
                        protocol_to_string(protocol), checksum,
                        ip_to_string(source), ip_to_string(destination));
   }
-
-  uint16_t calculate_checksum() const {
-    const uint8_t *p = reinterpret_cast<const uint8_t *>(this);
-    return ipv4::calculate_checksum({p, sizeof(Header)});
-  }
 };
 #pragma pack(pop)
 
@@ -142,6 +137,7 @@ inline void build(const Header &header, std::span<const uint8_t> payload,
   out.push_back(((header.flags & 0x07) << 13) |
                 (header.fragment_offset & 0x1FFF));
   out.push_back(((header.flags >> 3) & 0xFF) | (header.fragment_offset >> 13));
+  out.push_back(header.time_to_live);
   out.push_back((uint8_t)header.protocol);
 
   out.push_back((header.checksum >> 8) & 0xFF);
@@ -156,6 +152,13 @@ inline void build(const Header &header, std::span<const uint8_t> payload,
   out.push_back((header.destination >> 16) & 0xff);
   out.push_back((header.destination >> 8) & 0xff);
   out.push_back(header.destination & 0xff);
+
+  if (header.checksum == 0) {
+    auto checksum = htons(calculate_checksum(out));
+
+    out[10] = (checksum >> 8) & 0xff;
+    out[11] = checksum & 0xff;
+  }
 
   out.insert(out.end(), payload.begin(), payload.end());
 }

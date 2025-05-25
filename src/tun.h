@@ -12,6 +12,7 @@ public:
   void open();
 
   std::string get_name() const;
+  std::array<uint8_t, 6> get_mac() const;
 
   std::size_t read(std::vector<uint8_t> &buffer);
   std::size_t write(const std::vector<uint8_t> &buffer);

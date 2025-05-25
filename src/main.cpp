@@ -14,13 +14,13 @@ void signal_handler(int) { running = false; }
 int main() {
   signal(SIGINT, signal_handler);
   uint32_t ip_address = 0x0A0A0A05;
-  std::array<uint8_t, 6> mac = {0xBA, 0x14, 0x16, 0x19, 0x10, 0x1B};
+  std::array<uint8_t, 6> mac = {0x02, 0x00, 0x00, 0x00, 0x00, 0x02};
   TunDevice tap("tap69", 1500);
   std::vector<uint8_t> frame, reply;
 
   try {
     tap.open();
-    LOG_INFO("TUN interface {} created", tap.get_name());
+    LOG_INFO("TAP interface {} created", tap.get_name());
 
     while (running) {
       auto n = tap.read(frame);
@@ -106,10 +106,10 @@ int main() {
             icmp_reply_header.code = 0;
             icmp_reply_header.identifier = icmp_header->identifier;
             icmp_reply_header.sequence_number = icmp_header->sequence_number;
-            icmp_reply_header.checksum = icmp_header->calculate_checksum();
+            icmp_reply_header.checksum = 0;
 
             std::vector<uint8_t> icmp_reply_packet;
-            net::ethernet::ipv4::icmp::build(icmp_reply_header,
+            net::ethernet::ipv4::icmp::build(icmp_reply_header, icmp_data,
                                              icmp_reply_packet);
             LOG_DEBUG("ICMP reply: {}", icmp_reply_header.to_string());
 
@@ -124,10 +124,8 @@ int main() {
             ipv4_reply_header.time_to_live = 64;
             ipv4_reply_header.source = ip_address;
             ipv4_reply_header.destination = ipv4_header->source;
-            ipv4_reply_header.length = net::ethernet::ipv4::htons(
-                ipv4_reply_header.internet_header_length * 4 +
-                icmp_reply_packet.size());
-            ipv4_reply_header.checksum = ipv4_reply_header.calculate_checksum();
+            ipv4_reply_header.length = 20 + icmp_reply_packet.size();
+            ipv4_reply_header.checksum = 0;
 
             std::vector<uint8_t> ipv4_reply_packet;
             net::ethernet::ipv4::build(ipv4_reply_header, icmp_reply_packet,

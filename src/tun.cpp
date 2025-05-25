@@ -1,6 +1,7 @@
 #include "tun.h"
 #include "log.h"
 #include "utils.h"
+#include <array>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -44,8 +45,8 @@ void TunDevice::open() {
   LOG_DEBUG("Interface {} attached to fd {}", _if_name, _fd);
 
   utils::cmd("ip link set dev {} up", _if_name);
-  utils::cmd("ip route add dev {} {}", _if_name, "10.10.10.0/24");
-  // utils::cmd("ip addr add dev {} local {}", _if_name, "10.10.10.5"); //
+  utils::cmd("ip route add {} dev {}", "10.10.10.0/24", _if_name);
+  utils::cmd("ip addr add {} dev {}", "10.10.10.1", _if_name); //
 
   LOG_DEBUG("Interface {} initialized", _if_name);
 }
@@ -73,3 +74,19 @@ std::size_t TunDevice::write(const std::vector<uint8_t> &buffer) {
 }
 
 std::string TunDevice::get_name() const { return _if_name; }
+
+std::array<uint8_t, 6> TunDevice::get_mac() const {
+  int s = socket(AF_INET, SOCK_DGRAM, 0);
+  if (s < 0)
+    throw std::runtime_error("socket: " + std::string(strerror(errno)));
+  struct ifreq ifr{};
+  std::strncpy(ifr.ifr_name, _if_name.c_str(), IFNAMSIZ);
+  if (ioctl(s, SIOCGIFHWADDR, &ifr) < 0) {
+    ::close(s);
+    throw std::runtime_error("SIOCGIFHWADDR");
+  }
+  ::close(s);
+  std::array<uint8_t, 6> m;
+  std::memcpy(m.data(), ifr.ifr_hwaddr.sa_data, 6);
+  return m;
+};
